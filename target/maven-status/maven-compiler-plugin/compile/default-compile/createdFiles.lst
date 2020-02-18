@@ -1,0 +1,14 @@
+util/Util.class
+data/Device.class
+data/managers/MeditionManager.class
+models/Medition.class
+models/Sensor.class
+microservices/SensorDataService.class
+data/Device$TaskReceiveData.class
+microservices/SensorDeleteService.class
+microservices/SensorRegressionService.class
+data/Arduino.class
+microservices/SensorDataListService.class
+data/Conexion.class
+data/managers/SensorManager.class
+microservices/Main.class

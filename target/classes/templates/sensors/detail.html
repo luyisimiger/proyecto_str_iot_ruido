@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<html>
+
+<head>
+    <title>TODO supply a title</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/buefy/dist/buefy.min.css" />
+
+</head>
+
+<body>
+    <div id="app">
+        <div class="container is-fluid">
+            <div>TODO write content</div>
+            <a href="/">Inicio</a>
+
+            <h1 class="title">[[sensor.name]]</h1>
+            <h2 class="subtitle">[[sensor.portRead]]</h2>
+
+            <br>
+
+            <div class="columns">
+
+                <div class="column is-4">
+
+                    <b-table :data="sensor.meditions" :columns="tablecolumns" :narrowed="false" :paginated="true"
+                        per-page="10" sort-icon="arrow-up" default-sort-direction="desc" default-sort="fechahora"
+                        aria-next-label="Next page" aria-previous-label="Previous page" aria-page-label="Page"
+                        aria-current-label="Current page">
+                    </b-table>
+                </div>
+                <div class="column is-7 is-offset-1">
+                    <div class="box is-sucess">
+                        <canvas id="canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/es-us.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/regression/1.4.0/regression.min.js"></script>
+    <script src="https://unpkg.com/vue"></script>
+    <script src="https://unpkg.com/buefy/dist/buefy.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/html2canvas@1.0.0-alpha.12/dist/html2canvas.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.min.js"></script>
+
+    <script>
+
+        /* adopted from http://randomcolour.com */
+        const randomColor = function () {
+            var bg_colour = Math.floor(Math.random() * 16777215).toString(16);
+            bg_colour = "#" + ("000000" + bg_colour).slice(-6);
+            return bg_colour;
+        }
+
+        Vue.use(Buefy, {
+            defaultIconPack: 'fas',
+            defaultContainerElement: '#content',
+        })
+
+        var vueapp = new Vue({
+            el: '#app',
+            delimiters: ['[[', ']]'],
+            data: {
+
+                sensor: {
+                    _id: "${sensor.id}",
+                    name: "${sensor.name}",
+                    portcom: "${sensor.portRead}",
+                },
+
+                regresion: {
+                    pendiente: 0,
+                    constante: 0,
+                },
+
+                tablecolumns: [
+                    {
+                        field: 'fechahora',
+                        label: 'Fecha y hora',
+                        sortable: true
+                    },
+                    {
+                        field: 'valor',
+                        label: 'Medicion',
+                        sortable: true,
+                        numeric: true,
+                        centered: true,
+                    }
+                ],
+
+            },
+
+            computed: {
+
+                urldata() {
+                    return "/api/sensors/" + this.sensor._id
+                },
+
+                urlregresion() {
+                    return "/api/sensors/" + this.sensor._id + "/regression"
+                }
+
+            },
+
+            methods: {
+
+                fetchdata() {
+
+                    let that = this;
+
+                    axios.get(this.urldata)
+                        .then(function (resp) {
+                            console.log(resp.data.document);
+                            that.sensor = resp.data.document;
+                        })
+                        .then( this.fetch_regresion )
+                        .catch(function (error) {});
+
+                },
+
+                fetch_regresion() {
+
+                    let that = this;
+
+                    axios.get(this.urlregresion).then(function (resp) {
+                        console.log(resp.data);
+                        that.regresion = resp.data;
+                    }).catch(function (error) { });
+
+                },
+
+                chartConfig() {
+                    let color1 = randomColor();
+                    let color2 = randomColor();
+                    return {
+
+                        type: 'scatter',
+
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                type: 'line',
+                                label: "Mediciones",
+                                backgroundColor: color1,
+                                borderColor: color1,
+                                data: [],
+                                showLine: true,
+                                fill: false
+                            }, {
+                                type: 'line',
+                                label: "Regression Lineal",
+                                backgroundColor: color2,
+                                borderColor: color2,
+                                data: [],
+                                showLine: true,
+                                fill: false
+                            }],
+                        },
+
+                        options: {
+                            responsive: true,
+                            title: {
+                                display: false,
+                                text: 'Regresion lineal'
+                            },
+                            tooltips: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            hover: {
+                                mode: 'nearest',
+                                intersect: true
+                            },
+                            scales: {
+                            },
+                        }
+                    }
+                },
+
+                predict(x) {
+                    return (this.regresion.pendiente * x) + this.regresion.constante;
+                }
+            },
+
+            mounted() {
+
+                const context = document.getElementById('canvas').getContext('2d');
+                this.myChart = new Chart(context, this.chartConfig());
+                
+                setInterval(this.fetchdata, 2000);
+            },
+
+            watch: {
+
+                'sensor': {
+
+                    handler: function (val, oldVal) {
+
+                        /* se actualiza datos de recibidos del servidors */
+                        let data = this.sensor.meditions.map((e, i) => {
+                            let x = i; //new Date(e.fechahora); // stampa de tiempo (numerico)
+                            let y = e.valor;
+                            return { x, y };
+                        });
+
+                        let index = data.length;
+                        for (; index > 25; index--) {
+                            data.shift()
+                        }
+
+                        console.log(data);
+
+                        this.myChart.config.data.datasets[0].data = data;
+
+                        /* se dibuja nuevamente las graficas */
+                        this.myChart.update();
+                    }
+
+                },
+
+                regresion: {
+
+                    handler: function (val, oldVal) {
+
+                        //let valmin = this.sensor.meditions.reduce( (min, m, i) => max > m.valor ? max : m.valor );
+                        let valmin = this.myChart.config.data.datasets[0].data[0].x;
+                        let valmax = this.sensor.meditions.length;
+
+                        /* se actualiza datos de la regresion lineal */
+                        this.myChart.config.data.datasets[1].data = [{ x: valmin, y: this.predict(valmin) }, { x: valmax, y: this.predict(valmax) }];
+
+                        /* se dibuja nuevamente las graficas */
+                        this.myChart.update();
+
+                    }
+
+                },
+
+            },
+        });
+    </script>
+
+</body>
+
+</html>
